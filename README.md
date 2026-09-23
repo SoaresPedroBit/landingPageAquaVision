@@ -10,6 +10,7 @@ em um mini-PC no local). Sugestão da Escola de Startups (UniAmérica + Itaipu P
 |---|---|
 | `index.html` | Landing + formulário condicional. Página estática, sem dependências. A configuração fica no topo do `<script>` (`CONFIG`). |
 | `apps-script.gs` | Web App do Google Apps Script que grava as respostas no Google Sheets, na aba **Home** e na aba **Pro**. |
+| `midia/` | Fotos e vídeos de demonstração (veja "Fotos e vídeos"). |
 
 ## Formulário
 
@@ -65,11 +66,50 @@ const CONFIG = {
   PRECOS_PRO:  [ ... ],
   VERSAO_FORM: '1',
   CONTATO_EMAIL: '',       // e-mail para pedidos de exclusão (LGPD)
+  MIDIA: { hero, demo, home, pro },  // fotos e vídeos (veja abaixo)
 };
 ```
 
 Enquanto `SCRIPT_URL` estiver vazio, a página mostra um aviso de **modo de teste** acima do formulário
 e não grava nada (a resposta aparece só no console do navegador).
+
+## Fotos e vídeos
+
+A página já tem os espaços prontos. Basta colocar os arquivos na pasta `midia/` e preencher
+`CONFIG.MIDIA` no `index.html`. Nada precisa mudar no HTML.
+
+| Espaço | Onde aparece | Vazio |
+|---|---|---|
+| `hero` | Quadro grande no topo, ao lado do título. Um vídeo aqui toca **sem som e em loop**. | Mostra a ilustração da câmera. |
+| `demo` | Seção "Veja em ação", logo abaixo do topo. O 1º item fica grande; os demais, em grade. Fotos ampliam no clique. | A seção fica escondida. |
+| `home`, `pro` | Foto de capa dos cartões AquaVision Home e Pro. | Mostra um ícone. |
+
+```js
+MIDIA: {
+  hero: { tipo: 'video', src: 'midia/hero.mp4', poster: 'midia/hero.jpg', legenda: 'Protótipo em teste' },
+  demo: [
+    { tipo: 'video', src: 'midia/demo.mp4', poster: 'midia/demo.jpg', legenda: 'Protótipo detectando uma situação simulada' },
+    { tipo: 'youtube', src: 'https://youtu.be/XXXXXXXXXXX', legenda: 'Demonstração completa' },
+    { tipo: 'foto', src: 'midia/aparelho.jpg', alt: 'Aparelho AquaVision', legenda: 'O aparelho (mini-PC)' },
+  ],
+  home: 'midia/home.jpg',
+  pro: 'midia/pro.jpg',
+},
+```
+
+- **Tipos:** `foto` (JPG/WebP), `video` (MP4 ou WebM) e `youtube` (link ou ID). O player do YouTube só
+  carrega quando a pessoa clica.
+- **Vídeo:** MP4 (H.264), 1280 a 1920 px de largura, formato 16:9, idealmente **até 10 MB**. Vídeos mais
+  longos ficam melhor no YouTube. O GitHub recusa arquivos acima de 100 MB. Sempre informe um `poster`
+  (uma imagem do vídeo), que aparece enquanto ele carrega. Para comprimir:
+  `ffmpeg -i original.mov -vf scale=1280:-2 -c:v libx264 -crf 28 -preset slow -an midia/hero.mp4`
+  (o `-an` tira o áudio, que o vídeo do topo não usa).
+- **Fotos:** 1600 px de largura e até ~300 KB cada. Nas capas Home/Pro, prefira 16:9.
+- **`alt`:** descreva a foto em poucas palavras, para leitores de tela.
+- **Honestidade:** identifique na `legenda` quando for protótipo, teste ou situação simulada. Não mostre
+  o produto fazendo algo que ele ainda não faz.
+- **Direito de imagem:** tenha autorização de quem aparece. Com **crianças**, a autorização precisa ser dos
+  pais ou responsáveis (LGPD, art. 14). Para demonstrações, prefira adultos ou pessoas não identificáveis.
 
 ## Publicar o Apps Script (pendência 1)
 
