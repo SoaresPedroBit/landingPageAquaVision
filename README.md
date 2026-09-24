@@ -136,15 +136,45 @@ As abas **Home** e **Pro** e seus cabeçalhos são criados na primeira resposta.
 
 ## Testar o envio (pendência 4)
 
-O envio usa `fetch` com `mode: "no-cors"`, porque o Apps Script não responde com cabeçalhos CORS.
-A página **não consegue ler a resposta**: a tela de "obrigado" só confirma que a requisição saiu.
-Por isso, confira na planilha:
+A página envia a resposta e tenta ler o retorno do Apps Script:
+
+- **Retorno lido e gravação confirmada:** aparece "Obrigado! Resposta registrada."
+- **A planilha recusou** (limite por hora, verificação anti-robô): aparece uma mensagem de erro e a pessoa
+  pode tentar de novo.
+- **O navegador não deixou ler o retorno:** a página reenvia sem ler e mostra "Obrigado! Resposta enviada."
+  Cada resposta leva um id, e o Apps Script ignora a cópia se a primeira já tiver sido gravada.
+
+Não deu para testar com o Google de verdade qual desses casos acontece. Por isso, confira na planilha:
 
 1. Abra a URL `/exec` no navegador. Deve aparecer "AquaVision: App da Web ativo."
 2. No editor do Apps Script, rode `testarGravacao`: ela grava uma linha de teste em cada aba.
 3. Abra a página com `?utm_source=teste`, responda um fluxo **Home** e um **Pro**, com e sem e-mail,
    e com "Não pagaria". Confira se as linhas chegaram certas.
 4. Apague as linhas com origem `teste` antes de divulgar.
+
+## Proteção contra respostas falsas
+
+A URL do Apps Script fica visível no código da página. Qualquer pessoa pode enviar dados direto para ela,
+sem passar pelo formulário. Nada impede isso por completo, mas há três camadas:
+
+1. **Limite por hora** (sempre ativo): depois de `LIMITE_POR_HORA` gravações (150) na mesma hora, o script
+   recusa as próximas até a hora virar. Isso segura envios em massa. Ajuste no topo do `apps-script.gs`.
+2. **Respostas repetidas:** o mesmo id não é gravado duas vezes (por até 6 horas).
+3. **Cloudflare Turnstile** (verificação anti-robô, gratuita, **recomendada antes de divulgar**). Na maior
+   parte das vezes ela fica invisível; só pede um clique quando desconfia. Para ativar:
+   1. Crie uma conta em [dash.cloudflare.com](https://dash.cloudflare.com) e vá em **Turnstile > Add widget**.
+   2. Em hostname, coloque o domínio da página (por exemplo `soarespedrobit.github.io`). Modo: **Managed**.
+   3. Copie a **Site Key** para `CONFIG.TURNSTILE_SITEKEY` no `index.html`.
+   4. No Apps Script: **Configurações do projeto > Propriedades do script > Adicionar propriedade**, com nome
+      `TURNSTILE_SECRET` e a **Secret Key** como valor. **Nunca coloque a chave secreta no código**: o
+      repositório é público.
+   5. Publique uma nova versão do Apps Script (veja acima).
+
+   Com a chave secreta configurada, o script recusa envios sem verificação válida. Sem ela, só as camadas
+   1 e 2 funcionam. O `testarGravacao` continua funcionando, porque grava sem passar pela verificação.
+
+Mesmo assim, vale olhar a planilha de vez em quando: muitas respostas iguais em sequência, em poucos
+minutos, costumam ser sinal de abuso.
 
 ## Hospedagem
 
@@ -167,3 +197,4 @@ Por isso, confira na planilha:
 5. [ ] Definir a meta de validação antes de divulgar, por exemplo: nº mínimo de respostas por ramo e
    % que aceita uma faixa que cubra o payback (coluna "Nível da faixa").
 6. [ ] Recomendado (LGPD): preencher `CONFIG.CONTATO_EMAIL` com um e-mail para pedidos de exclusão.
+7. [ ] Recomendado: ativar o Cloudflare Turnstile (veja "Proteção contra respostas falsas").

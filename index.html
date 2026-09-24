@@ -995,6 +995,7 @@
               </fieldset>
 
               <div class="rodape-form">
+                <div id="turnstile" hidden></div>
                 <button type="submit" class="btn btn-escuro" id="botao-enviar">Enviar respostas</button>
                 <p class="status" id="status" role="status" aria-live="polite"></p>
               </div>
@@ -1004,7 +1005,7 @@
 
         <div class="cartao obrigado" id="obrigado" tabindex="-1" hidden>
           <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
-          <h3>Obrigado! Resposta registrada.</h3>
+          <h3 id="obrigado-titulo">Obrigado! Resposta registrada.</h3>
           <p id="obrigado-email" hidden>Vamos avisar no seu e-mail quando o AquaVision for lançado.</p>
           <p>Conhece alguém com piscina em casa, no condomínio ou no trabalho? Compartilhar a pesquisa ajuda muito.</p>
           <div class="compartilhar">
@@ -1102,6 +1103,10 @@ const CONFIG = {
 
   // Opcional (recomendado pela LGPD): e-mail para pedidos de exclusão.
   CONTATO_EMAIL: '',
+
+  // Recomendado antes de divulgar: verificação anti-robô Cloudflare Turnstile (gratuita).
+  // Aqui vai a chave do SITE (pública). A chave secreta fica só no Apps Script (veja o README).
+  TURNSTILE_SITEKEY: '',
 
   // Fotos e vídeos. Coloque os arquivos na pasta midia/ (veja o README).
   // Tipos: 'foto', 'video' (mp4/webm) ou 'youtube' (link ou ID do vídeo).
@@ -1284,6 +1289,8 @@ const CONFIG = {
 
   let ramoAtual = null;
   let enviando = false;
+  // Identifica esta resposta em todas as tentativas de envio, para o Apps Script não gravar em dobro.
+  const ID_RESPOSTA = window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
 
   const valor = (nome) => { const i = $(`input[name="${nome}"]:checked`, form); return i ? i.value : ''; };
   const marcados = (nome) => $$(`input[name="${nome}"]:checked`, form).map((i) => i.value);
@@ -1327,7 +1334,9 @@ const CONFIG = {
       } else {
         delete form.dataset.ramo;
       }
+      // Chance e plano têm texto diferente em cada ramo: trocou de ramo, responde de novo.
       desmarcar('chance');
+      desmarcar('plano');
     }
     el.proximas.hidden = !!ramo;
     mostrar(el.home, ramo === 'home');
@@ -1431,6 +1440,8 @@ const CONFIG = {
     const nivel = nivelPreco();
     const email = el.email.value.trim();
     const dados = {
+      id: ID_RESPOSTA,
+      turnstile: tokenTurnstile(),
       ramo: ramoAtual,
       local: valor('local'),
       precoFaixa: el.preco.value,
@@ -1456,52 +1467,104 @@ const CONFIG = {
     return dados;
   }
 
+  const MENSAGENS_ERRO = {
+    limite: 'Estamos recebendo muitas respostas agora. Tente de novo em alguns minutos.',
+    verificacao: 'Não conseguimos concluir a verificação anti-robô. Recarregue a página e tente de novo.',
+  };
+
+  function postar(corpo, modo, sinal) {
+    return fetch(CONFIG.SCRIPT_URL, {
+      method: 'POST',
+      mode: modo,
+      // text/plain evita a requisição prévia (OPTIONS), que o Apps Script não atende.
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: corpo,
+      signal: sinal,
+    });
+  }
+
+  // Devolve true quando a planilha confirmou a gravação e false quando não dá para saber.
   async function enviar(dados) {
     if (!CONFIG.SCRIPT_URL) {
       console.warn('[AquaVision] CONFIG.SCRIPT_URL vazio: resposta NÃO gravada.', dados);
-      return;
+      return false;
     }
+    const corpo = JSON.stringify(dados);
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const timer = setTimeout(() => ctrl.abort(), 20000);
     try {
-      // O Apps Script não devolve cabeçalhos CORS, então a resposta é opaca (no-cors):
-      // a página só sabe que a requisição saiu. Conferir as linhas na planilha.
-      await fetch(CONFIG.SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(dados),
-        signal: ctrl.signal,
-      });
+      let r;
+      try {
+        r = await postar(corpo, 'cors', ctrl.signal);
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        // O navegador não deixou ler a resposta (ou a rede falhou). Reenvia sem ler:
+        // o mesmo id faz o Apps Script ignorar a cópia se a primeira já tiver sido gravada.
+        await postar(corpo, 'no-cors', ctrl.signal);
+        return false;
+      }
+      let resposta = null;
+      try { resposta = await r.json(); } catch (_) { /* página de erro do Google */ }
+      if (!r.ok || !resposta || !resposta.ok) {
+        const erro = new Error('Planilha recusou a resposta: ' + ((resposta && resposta.erro) || 'HTTP ' + r.status));
+        erro.codigo = resposta && resposta.erro;
+        throw erro;
+      }
+      return true;
     } finally {
       clearTimeout(timer);
     }
   }
 
-  function concluir(dados) {
+  function concluir(dados, confirmado) {
     $('#form-cartao').hidden = true;
     $('#ja-respondeu').hidden = true;
+    $('#obrigado-titulo').textContent = confirmado ? 'Obrigado! Resposta registrada.' : 'Obrigado! Resposta enviada.';
     $('#obrigado-email').hidden = !dados.consentimento;
     el.obrigado.hidden = false;
     el.obrigado.scrollIntoView({ behavior: reduzMovimento ? 'auto' : 'smooth', block: 'center' });
     el.obrigado.focus({ preventScroll: true });
-    try { localStorage.setItem(CHAVE_RESPONDEU, new Date().toISOString()); } catch (_) { /* sem storage */ }
+    if (confirmado) {
+      try { localStorage.setItem(CHAVE_RESPONDEU, new Date().toISOString()); } catch (_) { /* sem storage */ }
+    }
   }
+
+  /* ---------- verificação anti-robô (Cloudflare Turnstile, opcional) ---------- */
+  let turnstileId = null;
+
+  function montarTurnstile() {
+    if (!CONFIG.TURNSTILE_SITEKEY) return;
+    const caixa = $('#turnstile');
+    caixa.hidden = false;
+    window.aoCarregarTurnstile = () => {
+      turnstileId = window.turnstile.render(caixa, {
+        sitekey: CONFIG.TURNSTILE_SITEKEY, language: 'pt-br', theme: 'light', appearance: 'interaction-only',
+      });
+    };
+    document.head.appendChild(criar('script', { src: 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=aoCarregarTurnstile', async: true }));
+  }
+
+  const tokenTurnstile = () => (window.turnstile && turnstileId !== null ? window.turnstile.getResponse(turnstileId) || '' : '');
+  const reiniciarTurnstile = () => { if (window.turnstile && turnstileId !== null) window.turnstile.reset(turnstileId); };
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     if (enviando || !validar()) return;
     const dados = montarPayload();
+    if (CONFIG.TURNSTILE_SITEKEY && !dados.turnstile) {
+      el.status.textContent = 'Aguarde a verificação anti-robô terminar e tente de novo.';
+      return;
+    }
     enviando = true;
     el.botao.disabled = true;
     el.botao.textContent = 'Enviando…';
     el.status.textContent = '';
     try {
-      await enviar(dados);
-      concluir(dados);
+      concluir(dados, await enviar(dados));
     } catch (err) {
       console.error('[AquaVision] falha no envio', err);
-      el.status.textContent = 'Não foi possível enviar agora. Verifique sua conexão e tente de novo.';
+      el.status.textContent = MENSAGENS_ERRO[err.codigo] || 'Não foi possível enviar agora. Verifique sua conexão e tente de novo.';
+      reiniciarTurnstile(); // o token só vale uma vez
     } finally {
       enviando = false;
       el.botao.disabled = false;
@@ -1550,6 +1613,7 @@ const CONFIG = {
   try { $('#ja-respondeu').hidden = !localStorage.getItem(CHAVE_RESPONDEU); } catch (_) { /* sem storage */ }
   montarMidia();
   montarRevelar();
+  montarTurnstile();
   atualizar();
 })();
 </script>

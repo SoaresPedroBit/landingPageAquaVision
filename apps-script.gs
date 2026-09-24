@@ -58,30 +58,43 @@ const ABAS = {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+// Proteção contra envios em massa: acima disso, novas respostas são recusadas até a hora virar.
+const LIMITE_POR_HORA = 150;
+
 function doPost(e) {
   const dados = lerDados_(e);
 
   // Honeypot: campo invisível que só robôs preenchem. Finge sucesso e não grava.
   if (dados.website) return resposta_({ ok: true });
+  if (!ABAS[dados.ramo]) return resposta_({ ok: false, erro: 'ramo' });
 
+  // Reenvio de uma resposta já gravada (a página reenvia quando não consegue ler o retorno).
+  if (jaGravada_(dados.id)) return resposta_({ ok: true });
+
+  if (!verificarTurnstile_(dados.turnstile)) return resposta_({ ok: false, erro: 'verificacao' });
+
+  return resposta_(gravar_(dados));
+}
+
+function gravar_(dados) {
   const aba = ABAS[dados.ramo];
-  if (!aba) return resposta_({ ok: false, erro: 'ramo inválido' });
-
   const valores = normalizar_(dados);
-
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(20000);
   } catch (err) {
-    return resposta_({ ok: false, erro: 'planilha ocupada, tente de novo' });
+    return { ok: false, erro: 'ocupado' };
   }
   try {
+    if (jaGravada_(dados.id)) return { ok: true };
+    if (!contarNoLimite_()) return { ok: false, erro: 'limite' };
     const sheet = obterAba_(aba);
     sheet.appendRow(montarLinha_(aba, valores, cabecalho_(sheet)));
+    marcarGravada_(dados.id);
   } finally {
     lock.releaseLock();
   }
-  return resposta_({ ok: true });
+  return { ok: true };
 }
 
 // Abrir a URL /exec no navegador mostra esta mensagem: serve para conferir a publicação.
@@ -107,10 +120,52 @@ function testarGravacao() {
       email: '', consentimento: false, origem: 'teste', versao: 'teste',
     },
   ];
+  // Grava direto, sem a verificação anti-robô (que só a página consegue fazer).
   exemplos.forEach(function (d) {
-    const r = doPost({ postData: { contents: JSON.stringify(d), type: 'text/plain' } });
-    Logger.log(d.ramo + ': ' + r.getContent());
+    Logger.log(d.ramo + ': ' + JSON.stringify(gravar_(d)));
   });
+}
+
+/* ---------------- anti-abuso ---------------- */
+
+// Cloudflare Turnstile: só é exigido quando a chave secreta estiver nas propriedades do script
+// (Configurações do projeto > Propriedades do script > TURNSTILE_SECRET). Nunca coloque a chave no código.
+function verificarTurnstile_(token) {
+  const segredo = PropertiesService.getScriptProperties().getProperty('TURNSTILE_SECRET');
+  if (!segredo) return true;
+  if (!token) return false;
+  const r = UrlFetchApp.fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+    method: 'post',
+    payload: { secret: segredo, response: String(token).slice(0, 2048) },
+    muteHttpExceptions: true,
+  });
+  try {
+    return JSON.parse(r.getContentText()).success === true;
+  } catch (err) {
+    return false;
+  }
+}
+
+function idValido_(id) {
+  return typeof id === 'string' && /^[\w-]{8,64}$/.test(id);
+}
+
+function jaGravada_(id) {
+  return idValido_(id) && CacheService.getScriptCache().get('id:' + id) !== null;
+}
+
+function marcarGravada_(id) {
+  if (idValido_(id)) CacheService.getScriptCache().put('id:' + id, '1', 21600); // 6 h, o máximo do cache
+}
+
+// Conta a gravação na hora atual; devolve false se o limite já foi atingido. Chamar dentro do lock.
+function contarNoLimite_() {
+  const cache = CacheService.getScriptCache();
+  const chave = 'hora:' + Math.floor(Date.now() / 3600000);
+  const n = Number(cache.get(chave) || 0);
+  if (n >= LIMITE_POR_HORA) return false;
+  cache.put(chave, String(n + 1), 3700);
+  return true;
 }
 
 /* ---------------- auxiliares ---------------- */
