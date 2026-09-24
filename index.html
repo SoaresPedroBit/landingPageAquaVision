@@ -403,6 +403,8 @@
     font-family: var(--mono); font-size: .74rem; font-weight: 600; line-height: 1.4;
   }
   .opcional { font-weight: 400; color: var(--suave); }
+  .opcao strong { font-weight: 600; }
+  .opcao small { display: block; margin-top: 2px; color: var(--suave); font-size: .88rem; font-weight: 400; }
   .dica { margin: 0 0 16px 42px; color: var(--suave); font-size: .93rem; }
   .sub { margin: 16px 0 0; padding: 18px; border-radius: var(--raio-m); background: var(--fundo); }
   .sub-titulo { font-weight: 600; font-size: .98rem; margin-bottom: 12px; }
@@ -824,7 +826,7 @@
         <div class="cartao form-cartao" id="form-cartao">
           <div class="progresso" aria-hidden="true">
             <div class="progresso-trilho"><div class="progresso-barra" id="progresso-barra"></div></div>
-            <span class="progresso-texto" id="progresso-texto">0 de 6</span>
+            <span class="progresso-texto" id="progresso-texto">0 de 7</span>
           </div>
 
           <form class="form" id="form-pesquisa" novalidate>
@@ -963,6 +965,19 @@
                 </div>
                 <div class="escala-legenda" aria-hidden="true"><span>1 · Nenhuma chance</span><span>5 · Com certeza</span></div>
                 <p class="erro" id="erro-chance"></p>
+              </fieldset>
+
+              <fieldset class="q" id="q-plano" aria-describedby="erro-plano" hidden>
+                <legend><span>
+                  <span data-ramo-texto="home">Qual forma de contratar você prefere?</span>
+                  <span data-ramo-texto="pro">Qual forma de contratar seria melhor para o local?</span>
+                </span></legend>
+                <div class="opcoes lista">
+                  <label class="opcao"><input type="radio" name="plano" value="Fidelidade"><span class="ind"></span><span><strong>Fidelidade</strong><small>Não paga o aparelho. Mensalidade maior, com contrato.</small></span></label>
+                  <label class="opcao"><input type="radio" name="plano" value="Flex"><span class="ind"></span><span><strong>Flex</strong><small>Paga o aparelho no início. Mensalidade menor.</small></span></label>
+                  <label class="opcao"><input type="radio" name="plano" value="Tanto faz"><span class="ind"></span><span>Tanto faz</span></label>
+                </div>
+                <p class="erro" id="erro-plano"></p>
               </fieldset>
 
               <fieldset class="q" id="q-email" aria-describedby="erro-email">
@@ -1255,6 +1270,7 @@ const CONFIG = {
     idades: $('#sub-idades'),
     preco: $('#preco'),
     chance: $('#q-chance'),
+    plano: $('#q-plano'),
     faixa: $('#faixa-escolhida'),
     email: $('#email'),
     subConsentimento: $('#sub-consentimento'),
@@ -1319,7 +1335,9 @@ const CONFIG = {
     mostrar(el.comum, !!ramo);
     mostrar(el.idades, ramo === 'home' && valor('criancas') === 'Sim');
     const nivel = nivelPreco();
+    // Quem escolhe "Não pagaria" não responde a chance nem o plano.
     mostrar(el.chance, !!ramo && nivel > 0);
+    mostrar(el.plano, !!ramo && nivel > 0);
     el.faixa.textContent = nivel > 0 ? el.preco.value : '';
     mostrar(el.subConsentimento, !!ramo && el.email.value.trim() !== '');
     $$('[data-ramo-texto]', form).forEach((s) => { s.hidden = s.dataset.ramoTexto !== ramo; });
@@ -1341,6 +1359,7 @@ const CONFIG = {
     'q-decide': () => (valor('decide') ? '' : 'Escolha uma opção.'),
     'q-preco': () => (el.preco.value ? '' : 'Escolha uma faixa de valor.'),
     'q-chance': () => (valor('chance') ? '' : 'Escolha um número de 1 a 5.'),
+    'q-plano': () => (valor('plano') ? '' : 'Escolha uma opção.'),
     'q-email': () => {
       const v = el.email.value.trim();
       if (!v) return '';
@@ -1352,13 +1371,13 @@ const CONFIG = {
 
   // Perguntas obrigatórias de cada ramo (o e-mail é opcional e fica de fora do progresso).
   const OBRIGATORIAS = {
-    home: ['q-local', 'q-criancas', 'q-seguranca', 'q-camera', 'q-preco', 'q-chance'],
-    pro: ['q-local', 'q-pessoas', 'q-vigia', 'q-decide', 'q-preco', 'q-chance'],
+    home: ['q-local', 'q-criancas', 'q-seguranca', 'q-camera', 'q-preco', 'q-chance', 'q-plano'],
+    pro: ['q-local', 'q-pessoas', 'q-vigia', 'q-decide', 'q-preco', 'q-chance', 'q-plano'],
   };
 
   function atualizarProgresso() {
     let ids = OBRIGATORIAS[ramoAtual || 'home'];
-    if (nivelPreco() === 0) ids = ids.filter((id) => id !== 'q-chance');
+    if (nivelPreco() === 0) ids = ids.filter((id) => id !== 'q-chance' && id !== 'q-plano');
     const feitas = ramoAtual ? ids.filter((id) => !REGRAS[id]()).length : 0;
     el.progTexto.textContent = `${feitas} de ${ids.length}`;
     el.progBarra.style.width = (feitas / ids.length) * 100 + '%';
@@ -1417,6 +1436,7 @@ const CONFIG = {
       precoFaixa: el.preco.value,
       precoNivel: nivel,
       chance: nivel > 0 ? Number(valor('chance')) : '',
+      plano: nivel > 0 ? valor('plano') : '',
       email: email,
       consentimento: !!email && el.consentimento.checked,
       origem: origem(),

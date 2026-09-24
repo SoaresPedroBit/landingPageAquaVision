@@ -10,7 +10,9 @@
  *   (Implantar > Gerenciar implantações > editar), senão a URL continua com o código antigo.
  *
  * Cada ramo grava em uma aba ("Home" e "Pro"). As abas e os cabeçalhos
- * são criados automaticamente na primeira resposta.
+ * são criados automaticamente na primeira resposta. Os valores são gravados
+ * pelo nome do cabeçalho: coluna nova no código vira coluna nova no fim da aba,
+ * sem desalinhar as respostas antigas.
  */
 
 // Vazio = usa a planilha à qual o script está vinculado (Extensões > Apps Script).
@@ -22,6 +24,7 @@ const COMUNS_FIM = [
   ['Preço máximo/mês', 'precoFaixa'],
   ['Nível da faixa (0 = não pagaria)', 'precoNivel'],
   ['Chance de contratar (1-5)', 'chance'],
+  ['Plano preferido', 'plano'],
   ['Deixou e-mail', 'deixouEmail'],
   ['E-mail', 'email'],
   ['Consentimento LGPD', 'consentimento'],
@@ -64,7 +67,7 @@ function doPost(e) {
   const aba = ABAS[dados.ramo];
   if (!aba) return resposta_({ ok: false, erro: 'ramo inválido' });
 
-  const linha = montarLinha_(aba, normalizar_(dados));
+  const valores = normalizar_(dados);
 
   const lock = LockService.getScriptLock();
   try {
@@ -73,7 +76,8 @@ function doPost(e) {
     return resposta_({ ok: false, erro: 'planilha ocupada, tente de novo' });
   }
   try {
-    obterAba_(aba).appendRow(linha);
+    const sheet = obterAba_(aba);
+    sheet.appendRow(montarLinha_(aba, valores, cabecalho_(sheet)));
   } finally {
     lock.releaseLock();
   }
@@ -94,12 +98,12 @@ function testarGravacao() {
     {
       ramo: 'home', local: 'Casa', criancas: 'Sim', idades: ['Até 3 anos', '4 a 6 anos'],
       seguranca: ['Cerca ou grade com portão'], camera: 'Não tenho câmera',
-      precoFaixa: 'R$ 50 a R$ 79', precoNivel: 3, chance: 4,
+      precoFaixa: 'R$ 50 a R$ 79', precoNivel: 3, chance: 4, plano: 'Flex',
       email: 'teste@exemplo.com', consentimento: true, origem: 'teste', versao: 'teste',
     },
     {
       ramo: 'pro', local: 'Condomínio', pessoas: '21 a 50', vigia: 'Funcionário com outras funções',
-      decide: 'Síndico(a) ou administradora', precoFaixa: 'Não pagaria', precoNivel: 0, chance: '',
+      decide: 'Síndico(a) ou administradora', precoFaixa: 'Não pagaria', precoNivel: 0, chance: '', plano: '',
       email: '', consentimento: false, origem: 'teste', versao: 'teste',
     },
   ];
@@ -142,8 +146,9 @@ function normalizar_(d) {
     decide: texto_(d.decide),
     precoFaixa: texto_(d.precoFaixa),
     precoNivel: nivel,
-    // Quem escolhe "Não pagaria" não responde a chance.
+    // Quem escolhe "Não pagaria" não responde a chance nem o plano.
     chance: nivel === 0 ? '' : inteiro_(d.chance, 1, 5),
+    plano: nivel === 0 ? '' : texto_(d.plano),
     deixouEmail: guardarEmail ? 'sim' : 'não',
     email: guardarEmail ? texto_(email, 254) : '',
     consentimento: guardarEmail ? 'sim' : '',
@@ -152,11 +157,18 @@ function normalizar_(d) {
   };
 }
 
-function montarLinha_(aba, valores) {
-  return aba.colunas.map(function (c) {
-    const v = valores[c[1]];
+// Monta a linha na ordem dos cabeçalhos que estão na aba.
+function montarLinha_(aba, valores, cabecalho) {
+  const campoPorTitulo = {};
+  aba.colunas.forEach(function (c) { campoPorTitulo[c[0]] = c[1]; });
+  return cabecalho.map(function (titulo) {
+    const v = valores[campoPorTitulo[titulo]];
     return v === undefined || v === null ? '' : v;
   });
+}
+
+function cabecalho_(sheet) {
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
 }
 
 function obterAba_(aba) {
@@ -171,6 +183,16 @@ function obterAba_(aba) {
     sheet.getRange(1, 1, 1, cabecalho.length).setFontWeight('bold');
     sheet.setFrozenRows(1);
     sheet.getRange('A:A').setNumberFormat('dd/MM/yyyy HH:mm:ss');
+    return sheet;
+  }
+  // Aba já existente: acrescenta no fim as colunas que o código ganhou depois.
+  const existentes = cabecalho_(sheet);
+  const faltando = aba.colunas
+    .map(function (c) { return c[0]; })
+    .filter(function (titulo) { return existentes.indexOf(titulo) === -1; });
+  if (faltando.length) {
+    const inicio = existentes.length + 1;
+    sheet.getRange(1, inicio, 1, faltando.length).setValues([faltando]).setFontWeight('bold');
   }
   return sheet;
 }

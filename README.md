@@ -15,7 +15,7 @@ em um mini-PC no local). Sugestão da Escola de Startups (UniAmérica + Itaipu P
 ## Formulário
 
 A primeira pergunta, **"Onde fica a piscina?"**, separa os ramos:
-**Casa → Home**; **Condomínio, Hotel/pousada, Clube ou Outro → Pro**. Cada ramo tem 7 perguntas
+**Casa → Home**; **Condomínio, Hotel/pousada, Clube ou Outro → Pro**. Cada ramo tem 8 perguntas
 (6 quando a pessoa escolhe "Não pagaria").
 
 | # | Home | Pro |
@@ -26,12 +26,16 @@ A primeira pergunta, **"Onde fica a piscina?"**, separa os ramos:
 | 4 | Já tem câmera que mostra a piscina? | Quem decide a compra |
 | 5 | Preço máximo/mês (select de faixas, com "Não pagaria") | idem |
 | 6 | Chance de contratar nesse valor (1 a 5). Não aparece se escolher "Não pagaria". | idem |
-| 7 | E-mail (opcional, só para aviso de lançamento) | idem |
+| 7 | Plano preferido: Fidelidade, Flex ou "Tanto faz". Não aparece se escolher "Não pagaria". | idem |
+| 8 | E-mail (opcional, só para aviso de lançamento) | idem |
 
 - A pergunta de preço usa como referência o **plano Fidelidade** (aparelho incluso na mensalidade), para que
   "valor máximo por mês" signifique a mesma coisa para todos. O texto fica em `#dica-preco` no `index.html`.
 - Se a pessoa trocar a faixa de preço depois de responder a chance, a chance é apagada e precisa ser
   respondida de novo, porque ela se refere à faixa escolhida.
+- A pergunta do plano apresenta a troca de forma neutra: **Fidelidade** (não paga o aparelho, mensalidade
+  maior, com contrato) × **Flex** (paga o aparelho no início, mensalidade menor). Cruzando com a faixa de
+  preço, dá para ver se quem aceita valores mais altos prefere não pagar o aparelho, por exemplo.
 - O **consentimento LGPD** só aparece, e só é obrigatório, quando o e-mail é preenchido. O servidor também
   só grava o e-mail se houver consentimento.
 - **Não há aceite de contato**: o texto diz que o e-mail serve só para o aviso de lançamento.
@@ -42,7 +46,7 @@ A primeira pergunta, **"Onde fica a piscina?"**, separa os ramos:
 
 **Home:** Data/hora · Onde fica a piscina · Crianças frequentam · Idades das crianças · Segurança atual ·
 Já tem câmera · Preço máximo/mês · Nível da faixa (0 = não pagaria) · Chance de contratar (1-5) ·
-**Deixou e-mail** (sim/não) · E-mail · Consentimento LGPD · Origem · Versão do formulário
+**Plano preferido** · **Deixou e-mail** (sim/não) · E-mail · Consentimento LGPD · Origem · Versão do formulário
 
 **Pro:** Data/hora · Onde fica a piscina · Pessoas por dia · Quem vigia a piscina · Quem decide a compra ·
 e as mesmas colunas a partir de "Preço máximo/mês".
@@ -54,6 +58,9 @@ e as mesmas colunas a partir de "Preço máximo/mês".
 - **Origem**: `utm_source / utm_medium / utm_campaign` da URL. Sem UTM, fica o site de origem ou `direto`.
   Use um link por canal, por exemplo `...?utm_source=whatsapp&utm_campaign=grupo-condominios`.
   O botão de compartilhar da tela final usa `utm_source=compartilhamento`.
+- O script grava **pelo nome do cabeçalho**. Se uma aba já existir com colunas antigas, as colunas novas
+  (como "Plano preferido") são acrescentadas no fim, sem desalinhar as respostas anteriores. Pode também
+  reordenar as colunas na planilha à vontade, desde que não renomeie os cabeçalhos.
 - **Versão do formulário**: vem de `CONFIG.VERSAO_FORM`. Troque o valor se mudar perguntas ou faixas
   com a pesquisa no ar, para não misturar respostas.
 
