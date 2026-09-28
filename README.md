@@ -15,7 +15,7 @@ em um mini-PC no local). Sugestão da Escola de Startups (UniAmérica + Itaipu P
 ## Formulário
 
 A primeira pergunta, **"Onde fica a piscina?"**, separa os ramos:
-**Casa → Home**; **Condomínio, Hotel/pousada, Clube ou Outro → Pro**. Cada ramo tem 8 perguntas
+**Casa → Home**; **Condomínio, Hotel/pousada ou Clube → Pro**. Cada ramo tem 8 perguntas
 (6 quando a pessoa escolhe "Não pagaria").
 
 | # | Home | Pro |
